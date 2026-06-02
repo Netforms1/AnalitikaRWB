@@ -9,8 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class AccountIn(BaseModel):
     name: str
     api_key: Optional[str] = None
-    tax_type: str = "usn_6"
+    tax_type: str = "usn_income"  # usn_income | usn_expenses | none
     tax_rate: Decimal = Decimal("0.06")
+    vat_rate: Decimal = Decimal("0")  # 0 | 0.05 | 0.07 | 0.20 | 0.22
 
 
 class AccountOut(BaseModel):
@@ -20,6 +21,7 @@ class AccountOut(BaseModel):
     api_key: Optional[str] = None
     tax_type: str
     tax_rate: Decimal
+    vat_rate: Decimal
     created_at: datetime
 
 
@@ -77,7 +79,8 @@ class ProfitSummary(BaseModel):
     rebill_logistic: Decimal
     additional_payment: Decimal
     cost_of_goods: Decimal
-    tax: Decimal
+    vat: Decimal = Field(description="НДС к уплате (исходящий минус упрощённый вычет)")
+    tax: Decimal = Field(description="УСН")
     external_expenses: Decimal
     net_profit: Decimal
     margin_pct: Decimal
@@ -105,6 +108,7 @@ class WeeklyPoint(BaseModel):
     revenue: Decimal
     to_pay: Decimal
     cost_of_goods: Decimal
+    vat: Decimal
     tax: Decimal
     external_expenses: Decimal
     net_profit: Decimal

@@ -18,8 +18,11 @@ class WBAccount(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
     api_key: Mapped[Optional[str]] = mapped_column(Text)
-    tax_type: Mapped[str] = mapped_column(String(16), default="usn_6")  # usn_6, usn_15, none
+    # УСН: usn_income (доходы), usn_expenses (доходы−расходы), none
+    tax_type: Mapped[str] = mapped_column(String(16), default="usn_income")
     tax_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=Decimal("0.06"))
+    # НДС: 0 / 0.05 / 0.07 / 0.20 / 0.22
+    vat_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=Decimal("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     reports: Mapped[list["Report"]] = relationship(back_populates="account", cascade="all,delete")

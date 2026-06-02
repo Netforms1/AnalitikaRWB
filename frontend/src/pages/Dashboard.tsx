@@ -64,7 +64,11 @@ export default function Dashboard({ accountId }: { accountId: number | null }) {
           <div className="grid cols-4" style={{ marginTop: 12 }}>
             <Metric label="Штрафы" value={summary.penalty} />
             <Metric label="Удержания" value={summary.deduction} />
-            <Metric label="Налог" value={summary.tax} />
+            <Metric label="НДС" value={summary.vat} />
+            <Metric label="УСН" value={summary.tax} />
+          </div>
+          <div className="grid cols-4" style={{ marginTop: 12 }}>
+            <Metric label="Прочие расходы" value={summary.external_expenses} />
             <Metric label="Маржа" value={`${summary.margin_pct}%`} signed />
           </div>
 

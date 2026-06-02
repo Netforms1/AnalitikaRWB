@@ -16,6 +16,7 @@ export interface Account {
   api_key: string | null;
   tax_type: string;
   tax_rate: string;
+  vat_rate: string;
   created_at: string;
 }
 
@@ -46,6 +47,7 @@ export interface ProfitSummary {
   rebill_logistic: string;
   additional_payment: string;
   cost_of_goods: string;
+  vat: string;
   tax: string;
   external_expenses: string;
   net_profit: string;
@@ -74,6 +76,7 @@ export interface WeeklyPoint {
   revenue: string;
   to_pay: string;
   cost_of_goods: string;
+  vat: string;
   tax: string;
   external_expenses: string;
   net_profit: string;

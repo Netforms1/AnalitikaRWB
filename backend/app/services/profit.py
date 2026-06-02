@@ -16,12 +16,32 @@ from .. import models, schemas
 
 
 ZERO = Decimal("0")
+ONE_HUNDRED = Decimal("100")
 
 
 def _pct(num: Decimal, denom: Decimal) -> Decimal:
     if not denom:
         return ZERO
-    return (num / denom * Decimal("100")).quantize(Decimal("0.01"))
+    return (num / denom * ONE_HUNDRED).quantize(Decimal("0.01"))
+
+
+def _vat_from_gross(gross: Decimal, vat_rate: Decimal) -> Decimal:
+    """НДС, выделенный из суммы с НДС: gross × r / (1 + r)."""
+    if not vat_rate or gross <= 0:
+        return ZERO
+    return (gross * vat_rate / (Decimal("1") + vat_rate)).quantize(Decimal("0.01"))
+
+
+def _usn(account, revenue: Decimal, to_pay: Decimal, cog: Decimal, vat: Decimal) -> Decimal:
+    """УСН: доходы (ставка × (выручка − НДС)) или доходы−расходы."""
+    rate = account.tax_rate or ZERO
+    if account.tax_type == "usn_income":
+        base = max(revenue - vat, ZERO)
+    elif account.tax_type == "usn_expenses":
+        base = max(to_pay - cog - vat, ZERO)
+    else:
+        return ZERO
+    return (base * rate).quantize(Decimal("0.01"))
 
 
 def _cost_for_nm(db: Session, account_id: int, nm_id: Optional[int], sa_name: Optional[str], at: date) -> Decimal:
@@ -104,16 +124,9 @@ def compute_summary(
         elif is_return:
             cog -= unit_cost * qty
 
-    # Налог
-    tax_base = ZERO
-    if account.tax_type == "usn_6":
-        tax_base = revenue
-    elif account.tax_type == "usn_15":
-        # «доходы минус расходы» — упрощённо: К перечислению минус себестоимость
-        tax_base = max(to_pay - cog, ZERO)
-    tax = (tax_base * (account.tax_rate or ZERO)).quantize(Decimal("0.01"))
+    vat = _vat_from_gross(revenue, account.vat_rate or ZERO)
+    tax = _usn(account, revenue, to_pay, cog, vat)
 
-    # Внешние расходы за период
     ext = db.execute(
         select(func.coalesce(func.sum(models.Expense.amount), 0)).where(
             models.Expense.account_id == account_id,
@@ -123,7 +136,7 @@ def compute_summary(
     ).scalar_one() or ZERO
     ext = Decimal(str(ext))
 
-    net = (to_pay - cog - tax - ext).quantize(Decimal("0.01"))
+    net = (to_pay - cog - vat - tax - ext).quantize(Decimal("0.01"))
     return schemas.ProfitSummary(
         date_from=date_from, date_to=date_to,
         revenue=revenue.quantize(Decimal("0.01")),
@@ -139,6 +152,7 @@ def compute_summary(
         rebill_logistic=rebill.quantize(Decimal("0.01")),
         additional_payment=addpay.quantize(Decimal("0.01")),
         cost_of_goods=cog.quantize(Decimal("0.01")),
+        vat=vat,
         tax=tax,
         external_expenses=ext.quantize(Decimal("0.01")),
         net_profit=net,
@@ -248,12 +262,8 @@ def compute_weekly(
     for wk in sorted(weeks):
         b = weeks[wk]
         wk_end = wk + timedelta(days=6)
-        if account.tax_type == "usn_6":
-            tax = (b["revenue"] * (account.tax_rate or ZERO)).quantize(Decimal("0.01"))
-        elif account.tax_type == "usn_15":
-            tax = (max(b["to_pay"] - b["cog"], ZERO) * (account.tax_rate or ZERO)).quantize(Decimal("0.01"))
-        else:
-            tax = ZERO
+        vat = _vat_from_gross(b["revenue"], account.vat_rate or ZERO)
+        tax = _usn(account, b["revenue"], b["to_pay"], b["cog"], vat)
         ext = db.execute(
             select(func.coalesce(func.sum(models.Expense.amount), 0)).where(
                 models.Expense.account_id == account_id,
@@ -262,12 +272,13 @@ def compute_weekly(
             )
         ).scalar_one() or ZERO
         ext = Decimal(str(ext))
-        net = b["to_pay"] - b["cog"] - tax - ext
+        net = b["to_pay"] - b["cog"] - vat - tax - ext
         points.append(schemas.WeeklyPoint(
             week_start=wk,
             revenue=b["revenue"].quantize(Decimal("0.01")),
             to_pay=b["to_pay"].quantize(Decimal("0.01")),
             cost_of_goods=b["cog"].quantize(Decimal("0.01")),
+            vat=vat,
             tax=tax,
             external_expenses=ext.quantize(Decimal("0.01")),
             net_profit=net.quantize(Decimal("0.01")),
