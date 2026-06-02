@@ -83,14 +83,26 @@ def ingest_rows(
         db.commit()
         return report
 
-    stmt = insert(models.ReportRow).values(payload)
-    update_cols = {c.name: c for c in stmt.excluded if c.name not in ("id", "account_id", "rrd_id")}
-    stmt = stmt.on_conflict_do_update(
-        constraint="uq_account_rrd",
-        set_=update_cols,
-    )
-    db.execute(stmt)
-    report.rows_count = len(payload)
+    # Дедуп по (account_id, rrd_id): ON CONFLICT не может дважды обновить ту же строку
+    # в одном INSERT. При коллизии берём последнюю запись.
+    dedup: dict[tuple, dict] = {}
+    for row in payload:
+        dedup[(row["account_id"], row["rrd_id"])] = row
+    payload = list(dedup.values())
+
+    # Postgres ограничивает один запрос 65535 параметрами. Режем на батчи.
+    cols_per_row = len(payload[0])
+    batch_size = max(1, 60000 // cols_per_row)
+    inserted = 0
+    for start in range(0, len(payload), batch_size):
+        chunk = payload[start:start + batch_size]
+        stmt = insert(models.ReportRow).values(chunk)
+        update_cols = {c.name: c for c in stmt.excluded if c.name not in ("id", "account_id", "rrd_id")}
+        stmt = stmt.on_conflict_do_update(constraint="uq_account_rrd", set_=update_cols)
+        db.execute(stmt)
+        inserted += len(chunk)
+
+    report.rows_count = inserted
     db.commit()
     db.refresh(report)
     return report
