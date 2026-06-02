@@ -1,3 +1,4 @@
+import time
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -8,6 +9,10 @@ from ..db import get_db
 from ..services import excel_parser, ingest, wb_api
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+# Cooldown 65 сек на /reports/pull по аккаунту — защита от случайных повторов
+_PULL_COOLDOWN_S = 65
+_last_pull: dict[int, float] = {}
 
 
 @router.get("", response_model=list[schemas.ReportOut])
@@ -34,6 +39,15 @@ async def pull_from_api(data: schemas.ApiPullIn, db: Session = Depends(get_db)):
         raise HTTPException(404, "Account not found")
     if not account.api_key:
         raise HTTPException(400, "Account has no WB API key")
+
+    now = time.monotonic()
+    last = _last_pull.get(account.id, 0)
+    elapsed = now - last
+    if elapsed < _PULL_COOLDOWN_S:
+        wait = int(_PULL_COOLDOWN_S - elapsed)
+        raise HTTPException(429, f"Подождите {wait} сек: лимит WB API 1 запрос в минуту.")
+    _last_pull[account.id] = now
+
     try:
         rows = await wb_api.fetch_report_detail(account.api_key, data.date_from, data.date_to)
     except wb_api.WBRateLimitError as e:

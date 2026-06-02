@@ -18,7 +18,14 @@ export default function Reports({ accountId }: { accountId: number | null }) {
   const [{ from, to }, setRange] = useState(defaultWeek);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
 
   const reload = async () => {
     if (!accountId) return;
@@ -30,11 +37,17 @@ export default function Reports({ accountId }: { accountId: number | null }) {
 
   const pull = async () => {
     setBusy(true); setMsg(null);
+    setCooldown(65);
     try {
       const r = await api.reports.pull(accountId, from, to);
       setMsg(`Загружено ${r.rows_count} строк из API`);
       reload();
-    } catch (e: any) { setMsg(`Ошибка: ${e.message || e}`); }
+    } catch (e: any) {
+      const m = String(e.message || e);
+      const match = m.match(/Подождите (\d+) сек/);
+      if (match) setCooldown(parseInt(match[1], 10));
+      setMsg(`Ошибка: ${m}`);
+    }
     finally { setBusy(false); }
   };
 
@@ -63,7 +76,9 @@ export default function Reports({ accountId }: { accountId: number | null }) {
         <div className="row">
           <label>С <input type="date" value={from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} /></label>
           <label>по <input type="date" value={to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} /></label>
-          <button onClick={pull} disabled={busy}>Подтянуть из WB API</button>
+          <button onClick={pull} disabled={busy || cooldown > 0}>
+            {busy ? "Загружаю..." : cooldown > 0 ? `Подождите ${cooldown}с` : "Подтянуть из WB API"}
+          </button>
           <span>или</span>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" />
           <button onClick={upload} disabled={busy} className="secondary">Загрузить Excel</button>
