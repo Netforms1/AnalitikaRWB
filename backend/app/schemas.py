@@ -91,6 +91,8 @@ class SkuProfitRow(BaseModel):
     sa_name: Optional[str]
     subject_name: Optional[str]
     brand_name: Optional[str]
+    title: Optional[str] = None
+    photo_url: Optional[str] = None
     sales_qty: int
     returns_qty: int
     revenue: Decimal
@@ -118,3 +120,20 @@ class ApiPullIn(BaseModel):
     account_id: int
     date_from: date
     date_to: date
+
+
+class ProductOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nm_id: int
+    sa_name: Optional[str]
+    title: Optional[str]
+    brand: Optional[str]
+    subject_name: Optional[str]
+    photo_url: Optional[str]
+
+
+class PeriodCompare(BaseModel):
+    current: ProfitSummary
+    previous: ProfitSummary
+    delta_pct: dict[str, Optional[Decimal]]

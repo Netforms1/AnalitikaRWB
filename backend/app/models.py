@@ -126,3 +126,20 @@ class Expense(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped["WBAccount"] = relationship(back_populates="expenses")
+
+
+class Product(Base):
+    """Карточка товара из WB Content API."""
+    __tablename__ = "products"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("wb_accounts.id", ondelete="CASCADE"), index=True)
+    nm_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    sa_name: Mapped[Optional[str]] = mapped_column(String(255), index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(512))
+    brand: Mapped[Optional[str]] = mapped_column(String(255))
+    subject_name: Mapped[Optional[str]] = mapped_column(String(255))
+    photo_url: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("account_id", "nm_id", name="uq_account_nm"),)

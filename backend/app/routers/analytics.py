@@ -23,3 +23,8 @@ def by_sku(account_id: int, date_from: date, date_to: date, db: Session = Depend
 @router.get("/weekly", response_model=list[schemas.WeeklyPoint])
 def weekly(account_id: int, date_from: date, date_to: date, db: Session = Depends(get_db)):
     return profit.compute_weekly(db, account_id, date_from, date_to)
+
+
+@router.get("/compare", response_model=schemas.PeriodCompare)
+def compare(account_id: int, date_from: date, date_to: date, db: Session = Depends(get_db)):
+    return profit.compute_compare(db, account_id, date_from, date_to)

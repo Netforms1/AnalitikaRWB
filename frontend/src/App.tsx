@@ -6,6 +6,7 @@ import Accounts from "./pages/Accounts";
 import Reports from "./pages/Reports";
 import Costs from "./pages/Costs";
 import Expenses from "./pages/Expenses";
+import Products from "./pages/Products";
 
 export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -41,6 +42,7 @@ export default function App() {
         <nav>
           <NavLink to="/" end>Дашборд</NavLink>
           <NavLink to="/reports">Отчёты</NavLink>
+          <NavLink to="/products">Товары</NavLink>
           <NavLink to="/costs">Себестоимость</NavLink>
           <NavLink to="/expenses">Расходы</NavLink>
           <NavLink to="/accounts">Магазины</NavLink>
@@ -50,6 +52,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard accountId={accountId} />} />
           <Route path="/reports" element={<Reports accountId={accountId} />} />
+          <Route path="/products" element={<Products accountId={accountId} />} />
           <Route path="/costs" element={<Costs accountId={accountId} />} />
           <Route path="/expenses" element={<Expenses accountId={accountId} />} />
           <Route path="/accounts" element={<Accounts onChange={reload} accounts={accounts} />} />

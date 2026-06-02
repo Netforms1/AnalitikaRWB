@@ -59,6 +59,8 @@ export interface SkuRow {
   sa_name: string | null;
   subject_name: string | null;
   brand_name: string | null;
+  title: string | null;
+  photo_url: string | null;
   sales_qty: number;
   returns_qty: number;
   revenue: string;
@@ -100,6 +102,22 @@ export interface Expense {
   comment: string | null;
 }
 
+export interface Product {
+  id: number;
+  nm_id: number;
+  sa_name: string | null;
+  title: string | null;
+  brand: string | null;
+  subject_name: string | null;
+  photo_url: string | null;
+}
+
+export interface PeriodCompare {
+  current: ProfitSummary;
+  previous: ProfitSummary;
+  delta_pct: Record<string, string | null>;
+}
+
 export const api = {
   accounts: {
     list: () => req<Account[]>("/accounts"),
@@ -136,6 +154,13 @@ export const api = {
       req<SkuRow[]>(`/analytics/by-sku?account_id=${accountId}&date_from=${dateFrom}&date_to=${dateTo}`),
     weekly: (accountId: number, dateFrom: string, dateTo: string) =>
       req<WeeklyPoint[]>(`/analytics/weekly?account_id=${accountId}&date_from=${dateFrom}&date_to=${dateTo}`),
+    compare: (accountId: number, dateFrom: string, dateTo: string) =>
+      req<PeriodCompare>(`/analytics/compare?account_id=${accountId}&date_from=${dateFrom}&date_to=${dateTo}`),
+  },
+  products: {
+    list: (accountId: number) => req<Product[]>(`/products?account_id=${accountId}`),
+    sync: (accountId: number) =>
+      req<{ synced: number }>(`/products/sync?account_id=${accountId}`, { method: "POST" }),
   },
   costs: {
     list: (accountId: number) => req<CostPrice[]>(`/costs?account_id=${accountId}`),

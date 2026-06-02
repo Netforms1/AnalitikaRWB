@@ -160,6 +160,27 @@ def compute_summary(
     )
 
 
+def compute_compare(
+    db: Session, account_id: int, date_from: date, date_to: date,
+) -> schemas.PeriodCompare:
+    """Текущий период vs предыдущий такой же длины."""
+    days = (date_to - date_from).days + 1
+    prev_to = date_from - timedelta(days=1)
+    prev_from = prev_to - timedelta(days=days - 1)
+    cur = compute_summary(db, account_id, date_from, date_to)
+    prev = compute_summary(db, account_id, prev_from, prev_to)
+
+    def delta(a: Decimal, b: Decimal) -> Optional[Decimal]:
+        if not b:
+            return None
+        return ((a - b) / abs(b) * Decimal("100")).quantize(Decimal("0.01"))
+
+    fields = ["revenue", "to_pay", "wb_commission", "logistics", "storage",
+              "cost_of_goods", "vat", "tax", "external_expenses", "net_profit"]
+    delta_pct = {f: delta(getattr(cur, f), getattr(prev, f)) for f in fields}
+    return schemas.PeriodCompare(current=cur, previous=prev, delta_pct=delta_pct)
+
+
 def compute_by_sku(
     db: Session, account_id: int, date_from: date, date_to: date,
 ) -> list[schemas.SkuProfitRow]:
@@ -202,12 +223,28 @@ def compute_by_sku(
         elif is_return:
             b["cog"] -= unit_cost * qty
 
+    # Подтянем title/photo одним запросом
+    nm_ids = {b["nm_id"] for b in bucket.values() if b["nm_id"]}
+    products = (
+        db.execute(
+            select(models.Product).where(
+                models.Product.account_id == account_id,
+                models.Product.nm_id.in_(nm_ids),
+            )
+        ).scalars().all()
+        if nm_ids else []
+    )
+    p_by_nm = {p.nm_id: p for p in products}
+
     out: list[schemas.SkuProfitRow] = []
     for b in bucket.values():
         net = b["to_pay"] - b["cog"]
+        p = p_by_nm.get(b["nm_id"]) if b["nm_id"] else None
         out.append(schemas.SkuProfitRow(
             nm_id=b["nm_id"], sa_name=b["sa_name"],
             subject_name=b["subject_name"], brand_name=b["brand_name"],
+            title=p.title if p else None,
+            photo_url=p.photo_url if p else None,
             sales_qty=b["sales_qty"], returns_qty=b["returns_qty"],
             revenue=b["revenue"].quantize(Decimal("0.01")),
             to_pay=b["to_pay"].quantize(Decimal("0.01")),
