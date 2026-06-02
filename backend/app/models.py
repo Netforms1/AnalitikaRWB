@@ -12,10 +12,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    accounts: Mapped[list["WBAccount"]] = relationship(back_populates="user", cascade="all,delete")
+
+
 class WBAccount(Base):
     __tablename__ = "wb_accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128))
     api_key: Mapped[Optional[str]] = mapped_column(Text)
     # УСН: usn_income (доходы), usn_expenses (доходы−расходы), none
@@ -25,6 +37,7 @@ class WBAccount(Base):
     vat_rate: Mapped[Decimal] = mapped_column(Numeric(6, 4), default=Decimal("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+    user: Mapped["User"] = relationship(back_populates="accounts")
     reports: Mapped[list["Report"]] = relationship(back_populates="account", cascade="all,delete")
     cost_prices: Mapped[list["CostPrice"]] = relationship(back_populates="account", cascade="all,delete")
     expenses: Mapped[list["Expense"]] = relationship(back_populates="account", cascade="all,delete")

@@ -14,6 +14,8 @@ a:hover { text-decoration: underline; }
   background: #1f2937;
   color: #d1d5db;
   padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
 }
 .sidebar h1 { color: #fff; font-size: 18px; margin: 0 0 24px; }
 .sidebar nav a {

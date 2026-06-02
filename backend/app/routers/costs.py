@@ -8,22 +8,31 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..db import get_db
+from ..deps import current_user, get_owned_account
 
 router = APIRouter(prefix="/costs", tags=["costs"])
 
 
 @router.get("", response_model=list[schemas.CostPriceOut])
-def list_costs(account_id: int, db: Session = Depends(get_db)):
+def list_costs(
+    account: models.WBAccount = Depends(get_owned_account),
+    db: Session = Depends(get_db),
+):
     return (
         db.query(models.CostPrice)
-        .filter(models.CostPrice.account_id == account_id)
+        .filter(models.CostPrice.account_id == account.id)
         .order_by(models.CostPrice.nm_id, models.CostPrice.valid_from.desc())
         .all()
     )
 
 
 @router.post("", response_model=schemas.CostPriceOut)
-def create_cost(account_id: int, data: schemas.CostPriceIn, db: Session = Depends(get_db)):
+def create_cost(
+    data: schemas.CostPriceIn,
+    account: models.WBAccount = Depends(get_owned_account),
+    db: Session = Depends(get_db),
+):
+    account_id = account.id
     if data.nm_id is None and not data.sa_name:
         raise HTTPException(400, "nm_id or sa_name required")
     # Закрываем предыдущую запись по этому ключу
@@ -46,12 +55,18 @@ def create_cost(account_id: int, data: schemas.CostPriceIn, db: Session = Depend
 
 
 @router.delete("/{cost_id}", status_code=204)
-def delete_cost(cost_id: int, db: Session = Depends(get_db)):
+def delete_cost(
+    cost_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(current_user),
+):
     cp = db.get(models.CostPrice, cost_id)
     if not cp:
         raise HTTPException(404)
-    db.delete(cp)
-    db.commit()
+    acc = db.get(models.WBAccount, cp.account_id)
+    if not acc or acc.user_id != user.id:
+        raise HTTPException(404)
+    db.delete(cp); db.commit()
 
 
 @router.post("/upload")
@@ -60,7 +75,11 @@ async def upload_costs(
     valid_from: date = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: models.User = Depends(current_user),
 ):
+    acc = db.get(models.WBAccount, account_id)
+    if not acc or acc.user_id != user.id:
+        raise HTTPException(404, "Account not found")
     """Массовая загрузка из Excel/CSV. Колонки: nm_id (или sa_name), cost."""
     content = await file.read()
     name = (file.filename or "").lower()

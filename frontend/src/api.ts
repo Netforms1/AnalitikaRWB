@@ -1,14 +1,32 @@
+import { authHeaders } from "./auth";
+
 const BASE = "/api";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(BASE + path, {
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init?.headers || {}),
+    },
   });
-  if (!resp.ok) throw new Error(`${resp.status}: ${await resp.text()}`);
+  if (resp.status === 401) {
+    localStorage.removeItem("analitika.token");
+    localStorage.removeItem("analitika.user");
+    location.reload();
+    throw new Error("Unauthorized");
+  }
+  if (!resp.ok) {
+    const t = await resp.text();
+    try { throw new Error(JSON.parse(t).detail || t); } catch { throw new Error(t); }
+  }
   if (resp.status === 204) return undefined as T;
   return resp.json();
 }
+
+// Multipart-аплоады делают свой fetch; экспортируем helper для авторизации.
+export function authedMultipart(): HeadersInit { return authHeaders(); }
 
 export interface Account {
   id: number;
@@ -142,7 +160,9 @@ export const api = {
       fd.append("date_from", dateFrom);
       fd.append("date_to", dateTo);
       fd.append("file", file);
-      const resp = await fetch(BASE + "/reports/upload", { method: "POST", body: fd });
+      const resp = await fetch(BASE + "/reports/upload", {
+        method: "POST", body: fd, headers: authedMultipart(),
+      });
       if (!resp.ok) throw new Error(await resp.text());
       return (await resp.json()) as Report;
     },
@@ -172,7 +192,9 @@ export const api = {
       fd.append("account_id", String(accountId));
       fd.append("valid_from", validFrom);
       fd.append("file", file);
-      const resp = await fetch(BASE + "/costs/upload", { method: "POST", body: fd });
+      const resp = await fetch(BASE + "/costs/upload", {
+        method: "POST", body: fd, headers: authedMultipart(),
+      });
       if (!resp.ok) throw new Error(await resp.text());
       return resp.json();
     },

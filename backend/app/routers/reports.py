@@ -6,36 +6,50 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..db import get_db
+from ..deps import current_user, get_owned_account
 from ..services import excel_parser, ingest, wb_api
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-# Cooldown 65 сек на /reports/pull по аккаунту — защита от случайных повторов
 _PULL_COOLDOWN_S = 65
 _last_pull: dict[int, float] = {}
 
 
 @router.get("", response_model=list[schemas.ReportOut])
-def list_reports(account_id: int | None = None, db: Session = Depends(get_db)):
-    q = db.query(models.Report)
+def list_reports(
+    account_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(current_user),
+):
+    q = db.query(models.Report).join(models.WBAccount).filter(models.WBAccount.user_id == user.id)
     if account_id:
         q = q.filter(models.Report.account_id == account_id)
     return q.order_by(models.Report.created_at.desc()).all()
 
 
 @router.delete("/{report_id}", status_code=204)
-def delete_report(report_id: int, db: Session = Depends(get_db)):
+def delete_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(current_user),
+):
     r = db.get(models.Report, report_id)
     if not r:
         raise HTTPException(404)
-    db.delete(r)
-    db.commit()
+    acc = db.get(models.WBAccount, r.account_id)
+    if not acc or acc.user_id != user.id:
+        raise HTTPException(404)
+    db.delete(r); db.commit()
 
 
 @router.post("/pull", response_model=schemas.ReportOut)
-async def pull_from_api(data: schemas.ApiPullIn, db: Session = Depends(get_db)):
+async def pull_from_api(
+    data: schemas.ApiPullIn,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(current_user),
+):
     account = db.get(models.WBAccount, data.account_id)
-    if not account:
+    if not account or account.user_id != user.id:
         raise HTTPException(404, "Account not found")
     if not account.api_key:
         raise HTTPException(400, "Account has no WB API key")
@@ -65,9 +79,10 @@ async def upload_excel(
     date_to: date = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: models.User = Depends(current_user),
 ):
     account = db.get(models.WBAccount, account_id)
-    if not account:
+    if not account or account.user_id != user.id:
         raise HTTPException(404, "Account not found")
     content = await file.read()
     try:

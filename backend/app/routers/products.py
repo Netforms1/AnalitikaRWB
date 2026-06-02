@@ -4,28 +4,33 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..db import get_db
+from ..deps import get_owned_account
 from ..services import wb_content
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
 @router.get("", response_model=list[schemas.ProductOut])
-def list_products(account_id: int, db: Session = Depends(get_db)):
+def list_products(
+    account: models.WBAccount = Depends(get_owned_account),
+    db: Session = Depends(get_db),
+):
     return (
         db.query(models.Product)
-        .filter(models.Product.account_id == account_id)
+        .filter(models.Product.account_id == account.id)
         .order_by(models.Product.title)
         .all()
     )
 
 
 @router.post("/sync")
-async def sync_products(account_id: int, db: Session = Depends(get_db)):
-    account = db.get(models.WBAccount, account_id)
-    if not account:
-        raise HTTPException(404, "Account not found")
+async def sync_products(
+    account: models.WBAccount = Depends(get_owned_account),
+    db: Session = Depends(get_db),
+):
     if not account.api_key:
         raise HTTPException(400, "Account has no WB API key")
+    account_id = account.id
     try:
         cards = await wb_content.fetch_all_cards(account.api_key)
     except wb_content.WBContentError as e:
