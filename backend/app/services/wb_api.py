@@ -20,6 +20,10 @@ class WBApiError(RuntimeError):
     pass
 
 
+class WBRateLimitError(WBApiError):
+    pass
+
+
 async def fetch_report_detail(
     api_key: str,
     date_from: date,
@@ -58,8 +62,16 @@ async def fetch_report_detail(
                     await asyncio.sleep(2 ** attempt)
                     continue
                 if resp.status_code == 429:
-                    log.info("WB 429, retrying in %ds", 2 ** attempt)
-                    await asyncio.sleep(2 ** attempt)
+                    # ВБ лимит на этот endpoint — 1 запрос в минуту.
+                    # Уважаем Retry-After если пришёл, иначе минимум 65 сек.
+                    retry_after = resp.headers.get("Retry-After")
+                    delay = max(int(retry_after), 65) if (retry_after and retry_after.isdigit()) else 65
+                    log.info("WB 429 (attempt %d), waiting %ds", attempt, delay)
+                    if attempt == 2:  # 2 попытки максимум (~2 минуты)
+                        raise WBRateLimitError(
+                            f"Лимит WB API исчерпан. Подождите {delay} сек и попробуйте снова."
+                        )
+                    await asyncio.sleep(delay)
                     continue
                 if resp.status_code >= 400:
                     body = resp.text[:500]
@@ -77,5 +89,7 @@ async def fetch_report_detail(
             rrdid = page[-1].get("rrd_id") or 0
             if not rrdid or len(page) < limit:
                 break
+            # ВБ держит 1 rps на этот endpoint — между страницами ждём.
+            await asyncio.sleep(65)
     log.info("WB total rows: %d", len(rows))
     return rows

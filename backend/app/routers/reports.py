@@ -36,6 +36,8 @@ async def pull_from_api(data: schemas.ApiPullIn, db: Session = Depends(get_db)):
         raise HTTPException(400, "Account has no WB API key")
     try:
         rows = await wb_api.fetch_report_detail(account.api_key, data.date_from, data.date_to)
+    except wb_api.WBRateLimitError as e:
+        raise HTTPException(429, str(e))
     except wb_api.WBApiError as e:
         raise HTTPException(502, str(e))
     report = ingest.ingest_rows(db, account.id, "api", data.date_from, data.date_to, rows)
